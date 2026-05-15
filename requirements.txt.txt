@@ -1,2 +1,3 @@
 python-jose[cryptography]==3.5.0
 jwcrypto==1.5.7
+pip install git+https://github.com/YourUsername/mle_core.git
