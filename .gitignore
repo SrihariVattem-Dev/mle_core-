@@ -1,0 +1,29 @@
+# Python Cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environments
+venv/
+env/
+.venv/
+.env
+
+# IDEs / Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Security & Keys (CRITICAL)
+# Never commit private keys or key JSON files!
+*.pem
+*.key
+*.cer
+*.crt
+keys.json
+secure_keys.json
+
+# OS generated files
+.DS_Store
+Thumbs.db
