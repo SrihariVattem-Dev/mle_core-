@@ -8,7 +8,7 @@ REQUIRED PACKAGES:
 pip install python-jose jwcrypto
 """
 
-from jose import jwt
+from jose import jwt, JWTError, ExpiredSignatureError
 from jwcrypto import jwk, jwe
 from datetime import datetime, timedelta
 import json
@@ -40,12 +40,20 @@ class MLEHandler:
         signed_token = decrypted.payload.decode()
 
         # 2. VERIFY
-        payload = jwt.decode(
-            signed_token,
-            client_public_key_pem,
-            algorithms=[self.algorithm]
-        )
-        return payload
+        try:
+            payload = jwt.decode(
+                signed_token,
+                client_public_key_pem,
+                algorithms=[self.algorithm],
+                options={"verify_aud": False} # SDK sets 'nested-jwt-sdk-server' by default
+            )
+            return payload
+        except ExpiredSignatureError:
+            raise Exception("Secure request has expired (exp claim failed)")
+        except JWTError as e:
+            raise Exception(f"Signature verification failed: {str(e)}")
+        except Exception as e:
+            raise Exception(f"Failed to verify request: {str(e)}")
 
     # ==========================================
     # SERVER → CLIENT FLOW (ENCRYPT)
@@ -69,7 +77,7 @@ class MLEHandler:
         client_key = jwk.JWK.from_pem(client_public_key_pem.encode())
         encrypted = jwe.JWE(
             signed_token.encode(),
-            protected={"alg": "RSA-OAEP-256", "enc": "A256GCM"}
+            protected={"alg": "RSA-OAEP-256", "enc": "A256GCM", "cty": "JWT"}
         )
         encrypted.add_recipient(client_key)
         
