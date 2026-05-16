@@ -1,7 +1,6 @@
-# MLE Core (Message Level Encryption)
+# MLE Core
 
-A lightweight, purely mathematical, database-agnostic Python library for Message Level Encryption. 
-This library provides a standalone utility to encrypt and decrypt **Nested JWTs** (JWS inside JWE) using `RSA-OAEP-256` and `RS256` for secure Client-Server communication.
+A professional, zero-configuration Message Level Encryption (MLE) engine for Python. It provides project-agnostic utility functions to encrypt and decrypt Nested JWTs (JWE + JWS).
 
 ## Features
 * **Zero Dependencies on Frameworks**: Can be used in FastAPI, Flask, Django, or pure Python scripts.
@@ -23,30 +22,44 @@ To add this library to your main project (e.g., Farmvest):
    pip install -r mle_core/requirements.txt
    ```
 
-## Usage Example
+## Quick Start
+
+### 1. Setup Keys
+The library automatically looks for `MLE_SERVER_PRIVATE_KEY` and `MLE_SERVER_PUBLIC_KEY` in your environment. If not found, it checks the `keys/` folder or **generates new ones automatically**.
+
+### 2. Usage
 
 ```python
-from mle_core import MLEHandler
+import mle_core
 
-# 1. Initialize the handler with your Server's keys
-mle = MLEHandler(
-    server_private_key_pem="-----BEGIN PRIVATE KEY...-----",
-    server_public_key_pem="-----BEGIN PUBLIC KEY...-----"
+# --- Communication with Frontend ---
+
+# Encrypt data for a specific client
+encrypted_token = mle_core.encrypt_for_client(
+    data={"message": "Hello World"},
+    client_public_key=USER_PUBLIC_KEY
 )
 
-# 2. Decrypt an incoming request from the frontend
-try:
-    decrypted_data = mle.decrypt_client_request(
-        encrypted_token=request_body.encrypted_payload,
-        client_public_key_pem="-----BEGIN PUBLIC KEY...-----"
-    )
-    print("Securely received:", decrypted_data)
-except Exception as e:
-    print("Failed to decrypt or verify!", e)
-
-# 3. Encrypt a secure response to send back
-encrypted_response_string = mle.encrypt_server_response(
-    data={"status": "success", "user_id": 123},
-    client_public_key_pem="-----BEGIN PUBLIC KEY...-----"
+# Decrypt data received from a client
+original_data = mle_core.decrypt_from_client(
+    token=ENCRYPTED_TOKEN_FROM_CLIENT,
+    client_public_key=USER_PUBLIC_KEY
 )
+
+# --- Internal Security ---
+
+# Encrypt data that only the server can read (e.g. Access Tokens)
+internal_token = mle_core.encrypt_internal(data={"user_id": 123})
+
+# Decrypt internal data
+data = mle_core.decrypt_internal(internal_token)
+
+# --- Handshake ---
+
+# Get the server's public key to share with the frontend
+print(mle_core.SERVER_PUBLIC_KEY)
 ```
+
+## Environment Variables
+- `MLE_SERVER_PRIVATE_KEY`: Your Server's RSA Private Key (PEM format).
+- `MLE_SERVER_PUBLIC_KEY`: Your Server's RSA Public Key (PEM format).
