@@ -8,11 +8,17 @@ REQUIRED PACKAGES:
 pip install python-jose[cryptography] jwcrypto
 """
 
+import json
 from jose import jwt
 from jwcrypto import jwk, jwe
 from datetime import datetime, timedelta
 import os
 from typing import Dict, Any
+from dotenv import load_dotenv
+
+load_dotenv()
+
+MLE_ENABLED = os.getenv("MLE_ENABLED", "True").lower() in ("true", "1", "yes")
 
 class MLEHandler:
     def __init__(self, server_private_key_pem: str, server_public_key_pem: str, algorithm: str = "RS256"):
@@ -125,13 +131,33 @@ _mle_instance = MLEHandler(SERVER_PRIVATE_KEY, SERVER_PUBLIC_KEY)
 # ==========================================
 
 def encrypt_for_client(data: dict, client_public_key: str):
+    if not MLE_ENABLED:
+        return data
     return _mle_instance.encrypt_for_client(data, client_public_key)
 
 def decrypt_from_client(token: str, client_public_key: str):
+    if not MLE_ENABLED:
+        if isinstance(token, dict):
+            return token
+        try:
+            return json.loads(token)
+        except Exception:
+            return token
+    
     return _mle_instance.decrypt_from_client(token, client_public_key)
 
 def encrypt_internal(data: dict):
+    if not MLE_ENABLED:
+        return json.dumps(data)
+
     return _mle_instance.encrypt_internal(data)
 
 def decrypt_internal(token: str):
+    if not MLE_ENABLED:
+        if isinstance(token, dict):
+            return token
+        try:
+            return json.loads(token)
+        except Exception:
+            return token
     return _mle_instance.decrypt_internal(token)
