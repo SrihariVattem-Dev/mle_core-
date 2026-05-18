@@ -6,6 +6,8 @@ from .mle_handler import (
     decrypt_internal,
     SERVER_PUBLIC_KEY
 )
+from .mle_middleware import MLEMiddleware
+
 
 def init(private_key: str = None, public_key: str = None, private_key_path: str = None, public_key_path: str = None, algorithm: str = "RS256"):
     """
