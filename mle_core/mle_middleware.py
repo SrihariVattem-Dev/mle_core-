@@ -56,14 +56,15 @@ class MLEMiddleware:
                 try:
                     response_data = json.loads(full_body)
                     encrypted_response = mle_handler.encrypt_for_client(response_data, client_public_key)
-                    new_response_body = json.dumps({"secure_response": encrypted_response}).encode("utf-8")
+                    new_response_body = encrypted_response.encode("utf-8")
                     
                     if response_start_message:
                         headers = [
                             (k, v) for k, v in response_start_message.get("headers", [])
-                            if k.lower() != b"content-length"
+                            if k.lower() not in (b"content-length", b"content-type")
                         ]
                         headers.append((b"content-length", str(len(new_response_body)).encode("utf-8")))
+                        headers.append((b"content-type", b"text/plain"))
                         response_start_message["headers"] = headers
                         await send(response_start_message)
                         
