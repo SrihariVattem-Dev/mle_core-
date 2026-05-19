@@ -56,7 +56,7 @@ class MLEHandler:
         client_key = jwk.JWK.from_pem(client_public_key_pem.encode())
         encrypted = jwe.JWE(
             signed_token.encode(),
-            protected={"alg": "RSA-OAEP-256", "enc": "A256GCM", "cty": "JWT"}
+            protected={"alg": "RSA-OAEP-256", "enc": "A256GCM", "zip": "DEF", "cty": "JWT"}
         )
         encrypted.add_recipient(client_key)
         
