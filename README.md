@@ -47,9 +47,11 @@ print(mle_core.SERVER_PUBLIC_KEY)
 
 ---
 
-## 🛡️ Transparent FastAPI Middleware Usage
+## 🛡️ Transparent ASGI Middleware Usage
 
-`mle_core` includes a generic `MLEMiddleware` for FastAPI. It uses a **Key Resolver callback** to avoid locking you into any specific database, ORM, or token implementation.
+`mle_core` includes a highly performant, generic `MLEMiddleware` designed as a pure **ASGI middleware**. It operates directly on ASGI `scope`, `receive`, and `send` pipelines, avoiding framework-specific overhead and eliminating common compatibility issues (such as streaming or body-buffering bugs associated with Starlette's `BaseHTTPMiddleware`).
+
+It uses a dynamic **Key Resolver callback** to locate each client's public key, ensuring your application remains completely decoupled from any specific database, ORM, or token implementation.
 
 ### What to write in your project's `main.py`:
 
@@ -93,13 +95,45 @@ async def resolve_client_public_key(request: Request) -> str | None:
         return None
 
 # 2. Add the MLEMiddleware and inject the callback
+# Since it is a standard ASGI middleware, you can register it directly
 app.add_middleware(MLEMiddleware, key_resolver=resolve_client_public_key)
 ```
 
-### How the Middleware Handles Requests transparently:
-1. **GET Requests:** Automatically decrypts `?encrypted_data=ey...` and rewrites the query parameters in-memory. Your router reads standard plain query arguments!
-2. **POST Requests:** Intercepts and decrypts `{"encrypted_data": "ey..."}`, patches headers (`Content-Length`/`Content-Type`), and mounts the raw JSON body. Your router reads native Pydantic objects!
-3. **Responses:** Intercepts outgoing server responses, encrypts them using the resolved `client_public_key`, and packages them into a `{"secure_response": "ey..."}` envelope.
+---
+
+### ⚙️ How the ASGI Pipeline Works Under the Hood
+
+The `MLEMiddleware` intercepts raw ASGI communication channels to provide completely transparent payload translation:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    Client->>Middleware: Encrypted Payload (GET/POST)
+    Note over Middleware: Decrypts & patches ASGI scope / headers
+    Middleware->>App/Router: Decrypted plain JSON / Query parameters
+    Note over App/Router: Process business logic normally
+    App/Router->>Middleware: Standard JSON Response
+    Note over Middleware: Intercepts & encrypts body via custom_send
+    Middleware->>Client: Encrypted {"secure_response": "..."}
+```
+
+1. **GET Requests:** Automatically detects `?encrypted_data=ey...` in query parameters. If present, it decrypts the parameter, reconstructs the plain query string dictionary, and patches the ASGI `scope["query_string"]` dynamically. Your routes read standard, unencrypted query arguments!
+2. **POST Requests:** Intercepts and streams the raw HTTP request body chunks from the ASGI `receive` channel. It decrypts the standard `{"encrypted_data": "ey..."}` wrapper, rewrites the raw ASGI headers to correct the `Content-Length`, and supplies a custom `receive` callback downstream. Your FastAPI routers receive standard, native Pydantic objects as if no encryption was ever applied!
+3. **Response Interception:** Employs a wrapped `custom_send` channel to intercept outgoing ASGI response events. It aggregates all chunked response data, encrypts the final JSON payload using the client's public key, packages it into a secure `{"secure_response": "ey..."}` envelope, corrects the response `Content-Length` header in `http.response.start`, and forwards it to the client.
+
+---
+
+### 🚨 Robust Error Handling & Logging
+
+To prevent malformed requests or cryptographic issues from causing unhandled exceptions in the application:
+* **Automatic Logging:** If a POST decryption failure occurs (due to mismatched keys, expired tokens, or malformed data), the middleware catches the exception, prints the traceback to stdout, and logs the full stack trace inside `logs/error.log` for easy administration and auditing.
+* **Graceful HTTP 400 Bad Request:** Instead of crashing or returning an unhandled 500 error, it returns a clean ASGI JSON payload to the client:
+  ```json
+  {
+    "status": "error",
+    "detail": "Decryption failed: <error_reason>"
+  }
+  ```
 
 ---
 
