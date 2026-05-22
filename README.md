@@ -108,26 +108,27 @@ The `MLEMiddleware` intercepts raw ASGI communication channels to provide comple
 ```mermaid
 sequenceDiagram
     autonumber
-    Client->>Middleware: Encrypted Payload (GET/POST)
+    Client->>Middleware: Encrypted Payload (GET/POST/PUT/PATCH)
     Note over Middleware: Decrypts & patches ASGI scope / headers
     Middleware->>App/Router: Decrypted plain JSON / Query parameters
     Note over App/Router: Process business logic normally
     App/Router->>Middleware: Standard JSON Response
     Note over Middleware: Intercepts & encrypts body via custom_send
-    Middleware->>Client: Encrypted {"secure_response": "..."}
+    Middleware->>Client: Raw Encrypted String (JWE Token)
 ```
 
-1. **GET Requests:** Automatically detects `?encrypted_data=ey...` in query parameters. If present, it decrypts the parameter, reconstructs the plain query string dictionary, and patches the ASGI `scope["query_string"]` dynamically. Your routes read standard, unencrypted query arguments!
-2. **POST Requests:** Intercepts and streams the raw HTTP request body chunks from the ASGI `receive` channel. It decrypts the standard `{"encrypted_data": "ey..."}` wrapper, rewrites the raw ASGI headers to correct the `Content-Length`, and supplies a custom `receive` callback downstream. Your FastAPI routers receive standard, native Pydantic objects as if no encryption was ever applied!
-3. **Response Interception:** Employs a wrapped `custom_send` channel to intercept outgoing ASGI response events. It aggregates all chunked response data, encrypts the final JSON payload using the client's public key, packages it into a secure `{"secure_response": "ey..."}` envelope, corrects the response `Content-Length` header in `http.response.start`, and forwards it to the client.
+1. **Strict Enforcement & Bypass:** The middleware enforces encryption strictly when `MLE_ENABLED=True`. If a client key is resolved but the request payload is unencrypted, it rejects the request with a `400 Bad Request`. If no key is resolved, it assumes the client hasn't onboarded to MLE and bypasses decryption. Additionally, any client can completely bypass the MLE pipeline by sending the `X-Flutter-Bypass-MLE: true` header.
+2. **GET Requests:** Automatically detects `?encrypted_data=ey...` in query parameters. If present, it decrypts the parameter, reconstructs the plain query string dictionary, and patches the ASGI `scope["query_string"]` dynamically. Your routes read standard, unencrypted query arguments! On decryption failure, it gracefully returns a `400 Bad Request`.
+3. **POST/PUT/PATCH Requests:** Intercepts and streams the raw HTTP request body chunks from the ASGI `receive` channel. It decrypts the standard `{"encrypted_data": "ey..."}` or `{"encrypted_payload": "ey..."}` wrapper, rewrites the raw ASGI headers to correct the `Content-Length`, and supplies a custom `receive` callback downstream. Your FastAPI routers receive standard, native Pydantic objects as if no encryption was ever applied!
+4. **Response Interception:** Employs a wrapped `custom_send` channel to intercept outgoing ASGI response events. It aggregates all chunked response data, encrypts the final JSON payload using the client's public key, encodes the resulting JWE string directly as the raw response body (setting `Content-Type` to `text/plain`), corrects the response `Content-Length` header in `http.response.start`, and forwards it to the client.
 
 ---
 
 ### 🚨 Robust Error Handling & Logging
 
 To prevent malformed requests or cryptographic issues from causing unhandled exceptions in the application:
-* **Automatic Logging:** If a POST decryption failure occurs (due to mismatched keys, expired tokens, or malformed data), the middleware catches the exception, prints the traceback to stdout, and logs the full stack trace inside `logs/error.log` for easy administration and auditing.
-* **Graceful HTTP 400 Bad Request:** Instead of crashing or returning an unhandled 500 error, it returns a clean ASGI JSON payload to the client:
+* **Automatic Logging:** If a decryption failure occurs (due to mismatched keys, expired tokens, or malformed data), the middleware catches the exception, logs the debug trace, and appends to `logs/error.log` for easy administration and auditing.
+* **Graceful HTTP 400 Bad Request:** Instead of crashing or returning an unhandled 500 error, it returns a clean ASGI JSON payload to the client for both GET and POST/PUT/PATCH failures:
   ```json
   {
     "status": "error",

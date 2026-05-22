@@ -78,7 +78,10 @@ class MLEHandler:
                 signed_token,
                 client_public_key_pem,
                 algorithms=[self.algorithm],
-                options={"verify_aud": False}
+                options={
+                    "verify_aud": False,
+                    "verify_nbf": False  # Fix for clock skew!
+                }
             )
             return payload
         except Exception as e:
